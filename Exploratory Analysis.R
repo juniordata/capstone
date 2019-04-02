@@ -42,7 +42,6 @@ sale$Stay_In_Current_City_Years[sale$Stay_In_Current_City_Years == "4+"] <- "4"
 
 
 #change variables into types
-sale$User_ID <- as.factor(sale$User_ID)
 sale$Gender <- as.numeric(sale$Gender)
 sale$Age <- as.numeric(sale$Age)
 sale$Occupation <- as.numeric(sale$Occupation)
@@ -54,16 +53,15 @@ sale$Product_Category_2 <- as.numeric(sale$Product_Category_2)
 sale$Product_Category_3 <- as.numeric(sale$Product_Category_3)
 
 
-#removing user ID and Product ID, 0 variance
+#removing user ID and Product ID, large variance
 library(caret)
 library(dplyr)
-salenew <- sale %>%
-  select(-User_ID, -Product_ID)
+salenew <- select(sale, c(-User_ID, -Product_ID, -Product_Category_3))
 
 #Sampling
 set.seed(100)
 salesample<- salenew$Purchase %>% 
-  createDataPartition(p = 0.8, list = FALSE)
+  createDataPartition(p = 0.1, list = FALSE)
 salesample<- salenew[salesample,]
 
 #Partitioning
@@ -106,67 +104,120 @@ TestPCA <- TestPCA[,1:10]
 
 #Decision tree
 library(rpart)
-DT = rpart(Purchase ~ Gender + Age + Occupation + City_Category + Stay_In_Current_City_Years+Marital_Status+Product_Category_1+Product_Category_2+Product_Category_3,data = Train)
-plot(DT)
-text(DT)
+library(rpart.plot)
+DT = rpart(Purchase ~ .,method="anova", 
+           data = Train)
+rpart.plot(DT)
 #predict decision tree
 DT1<- predict(DT, Test)
-#evaluting error
+#evaluting error RMSE
 DTerror<- DT1 - Test$Purchase
 sqrt(mean(DTerror^2))
+#results
+data.frame( R2 = R2(DT1, Test$Purchase),
+            RMSE = RMSE(DT1, Test$Purchase),
+            MAE = MAE(DT1, Test$Purchase))
+#10 fold
+DT2 = rpart(Purchase ~ .,method="anova", 
+            data = Train,
+            control = list(cp = 0, xval = 10))
+#prediction
+DT3 <- predict(DT2, Test)
+#RMSE
+DTerror1 <- DT3 - Test$Purchase
+sqrt(mean(DTerror1^2))
+#results
+data.frame( R2 = R2(DT3, Test$Purchase),
+            RMSE = RMSE(DT3, Test$Purchase),
+            MAE = MAE(DT3, Test$Purchase))
+
+
 
 #Random Forest
 library(randomForest)
-RF = randomForest(Purchase ~ Gender + Age + Occupation + City_Category + Stay_In_Current_City_Years+Marital_Status+Product_Category_1,data = Train,ntree = 100)
+RF <- randomForest(Purchase ~ .,data = Train,ntree = 100)
 #predict random forest
 RF1<- predict(RF, Test)
 #RMSE
 RFerror<- RF1 - Test$Purchase
 sqrt(mean(RFerror^2))
+#results
+data.frame( R2 = R2(RF1, Test$Purchase),
+            RMSE = RMSE(RF1, Test$Purchase),
+            MAE = MAE(RF1, Test$Purchase))
+
+
 
 #KNN
-set.seed(111)
-kn <- knn(Train,Test,cl=Train$Purchase,k=10)
-#Confusion Matrix
-matrix <- table(kn,Train$Purchase)
-#accuracy
-accuracy <- function(x){sum(diag(x)/(sum(rowSums(x)))) * 100}
-accuracy(matrix)
-
-#Testing
-sale1<-read.csv('BlackFridayTest.csv', stringsAsFactors = FALSE)
-#removing all NA values 
-sale1<-na.omit(sale)
-
-#structure of data
-str(sale1)
-
-#consistent data
-#converting gender to binary
-sale1$Gender <- ifelse(sale$Gender == "M", 0, 1)
-
-#converting age to numeric
-sale1$Age[sale1$Age == "0-17"] <- "15"
-sale1$Age[sale1$Age == "18-25"] <- "21"
-sale1$Age[sal1e$Age == "26-35"] <- "30"
-sale1$Age[sale1$Age == "36-45"] <- "40"
-sale1$Age[sale1$Age == "46-50"] <- "48"
-sale1$Age[sale1$Age == "51-55"] <- "53"
-sale1$Age[sale1$Age == "55+"] <- "60"
-
-#converting city category to numeric
-sale1$City_Category[sale1$City_Category == "A"] <- "0"
-sale1$City_Category[sale1$City_Category == "B"] <- "1"
-sale1$City_Category[sale1$City_Category == "C"] <- "2"
-
-#converting stay in currenty city years to numeric
-sale1$Stay_In_Current_City_Years[sale1$Stay_In_Current_City_Years == "4+"] <- "4"
-
-#removing user ID and Product ID, 0 variance
+library(ISLR)
 library(caret)
-library(dplyr)
-salenew1 <- sale1 %>%
-  select(-User_ID, -Product_ID)
+#normalizing
+#10-fold
+KN <- train(Purchase ~ ., data = Train, method = "kknn", 
+      trControl = trainControl("cv",number = 10), 
+      preProcess = c("center","scale"), 
+      tuneLength = 10)
+#predict knn
+KN1 <-predict(KN, Test)
+#RMSE
+KNerror <- KN1 - Test$Purchase
+sqrt(mean(KNerror^2))
+#results
+data.frame( R2 = R2(KN1, Test$Purchase),
+            RMSE = RMSE(KN1, Test$Purchase),
+            MAE = MAE(KN1, Test$Purchase))
+#10-folds repeat 3 times
+KN2 <- train(Purchase ~ ., data = Train, method = "kknn", 
+       trControl = trainControl("repeatedcv",number = 10, repeats = 3),
+       preProcess = c("center","scale"), 
+       tuneLength = 10)
+#prediction
+KN3 <- predict(KN2, Test)
+#RMSE
+KNerror1 <- KN3 - Test$Purchase
+sqrt(mean(KNerror1^2))
+#results
+data.frame( R2 = R2(KN3, Test$Purchase),
+            RMSE = RMSE(KN3, Test$Purchase),
+            MAE = MAE(KN3, Test$Purchase))
+
+
+
+#Linear Regression
+LM <- lm(Purchase ~ .,data = Train)
+#prediction
+LM1 <- predict(LM, Test)
+#RMSE
+LMerror <- LM1 - Test$Purchase
+sqrt(mean(LMerror^2))
+#results
+data.frame( R2 = R2(LM1, Test$Purchase),
+            RMSE = RMSE(LM1, Test$Purchase),
+            MAE = MAE(LM1, Test$Purchase))
+#10-folds
+LM2 <- train(Purchase ~ ., data = Train, method = "lm", 
+      trControl = trainControl("cv",number = 10))
+#prediction
+LM3 <- predict(LM2, Test)
+#RMSE
+LMerror1 <- LM3 - Test$Purchase
+sqrt(mean(LMerror1^2))
+#results
+data.frame( R2 = R2(LM3, Test$Purchase),
+            RMSE = RMSE(LM3, Test$Purchase),
+            MAE = MAE(LM3, Test$Purchase))
+#10-folds repeat 3 times
+LM4 <- train(Purchase ~ ., data = Train, method = "lm", 
+             trControl = trainControl("repeatedcv",number = 10, repeats = 3))
+#prediction
+LM5 <- predict(LM4, Test)
+#RMSE
+LMerror2 <- LM5 - Test$Purchase
+sqrt(mean(LMerror2^2))
+#results
+data.frame( R2 = R2(LM5, Test$Purchase),
+            RMSE = RMSE(LM5, Test$Purchase),
+            MAE = MAE(LM5, Test$Purchase))
 
 
 
